@@ -29,6 +29,7 @@
 ```bash
   pip install mysql-connector-python
 
+
 Запуск миграции
 
 - Скопируйте скрипт на сервер или рабочую станцию
