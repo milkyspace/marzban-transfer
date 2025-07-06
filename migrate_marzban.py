@@ -6,6 +6,7 @@ import secrets
 import getpass
 import os
 import datetime
+import pytz  # Добавлен новый импорт
 
 def generate_password(length=32):
     """Генерация случайного пароля для Trojan/Shadowsocks"""
@@ -113,30 +114,44 @@ def convert_timestamp(ts):
     except (ValueError, TypeError, OSError):
         return None
 
-def ensure_datetime(value, default=None):
-    """Конвертирует значение в DATETIME, сохраняя NULL (None)"""
-    # Если значение None или 0 - возвращаем None (для expire это NULL)
+def ensure_datetime(value, default=None, timezone='UTC'):
+    """Конвертирует значение в DATETIME с учетом часового пояса"""
     if value is None or value == 0:
         return None
-    
-    # Если значение уже является строкой в правильном формате
-    if isinstance(value, str) and len(value) == 19:  # 'YYYY-MM-DD HH:MM:SS'
+
+    # Обработка числового timestamp
+    if isinstance(value, (int, float)):
         try:
-            # Проверяем, что строка соответствует формату
-            datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-            return value
+            # Проверка диапазона
+            if 0 < value <= 253402300799:  # Диапазон 1970-9999 год
+                # Создаем UTC-дату
+                utc_dt = datetime.datetime.utcfromtimestamp(value)
+                
+                # Конвертируем в нужный часовой пояс
+                if timezone == 'Europe/Moscow':
+                    msk_tz = pytz.timezone('Europe/Moscow')
+                    utc_dt = pytz.utc.localize(utc_dt)
+                    msk_dt = utc_dt.astimezone(msk_tz)
+                    return msk_dt.strftime('%Y-%m-%d %H:%M:%S')
+                return utc_dt.strftime('%Y-%m-%d %H:%M:%S')
+        except (TypeError, ValueError):
+            pass
+
+    # Обработка строкового значения
+    elif isinstance(value, str):
+        try:
+            # Парсим наивное время (без часового пояса)
+            dt = datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            
+            # Конвертируем в нужный часовой пояс
+            if timezone == 'Europe/Moscow':
+                msk_tz = pytz.timezone('Europe/Moscow')
+                dt = msk_tz.localize(dt)
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            return value  # Возвращаем как есть для UTC
         except ValueError:
             pass
-    
-    # Пробуем конвертировать из timestamp
-    try:
-        # Проверка на корректный диапазон времени
-        if 0 < value <= 253402300799:  # Диапазон 1970-9999 год
-            return datetime.datetime.utcfromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
-    except (TypeError, ValueError):
-        pass
-    
-    # Во всех остальных случаях возвращаем default
+
     return default
 
 # Основной код скрипта
@@ -177,7 +192,18 @@ new_config = get_db_config("Новый", new_config)
 # Сохраняем новую конфигурацию (без паролей)
 save_config(old_config, new_config)
 
-# Далее идет оригинальный код миграции...
+# Запрос о временных зонах
+print("\n" + "="*50)
+print("Настройка временных зон:")
+print("1. Старая БД: UTC (рекомендуется)")
+print("2. Старая БД: Москва (UTC+3)")
+old_db_tz = input("В какой временной зоне хранятся данные в СТАРОЙ базе? (1/2): ").strip()
+old_db_tz = 'Europe/Moscow' if old_db_tz == '2' else 'UTC'
+
+print("\nНовая БД всегда использует UTC")
+print("Все данные будут автоматически конвертированы")
+
+# Далее идет код миграции...
 try:
     # Подключение к старой базе
     old_conn = mysql.connector.connect(**old_config)
@@ -224,14 +250,14 @@ try:
         # Определяем текущее время UTC для значений по умолчанию
         now_utc = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Обработка временных полей с гарантией значений
-        created_at = ensure_datetime(user.get('created_at'), now_utc)
-        expire = ensure_datetime(user.get('expire'))
-        sub_revoked_at = ensure_datetime(user.get('sub_revoked_at'))
-        sub_updated_at = ensure_datetime(user.get('sub_updated_at'))
-        online_at = ensure_datetime(user.get('online_at'))
-        edit_at = ensure_datetime(user.get('edit_at'))
-        last_status_change = ensure_datetime(user.get('last_status_change'))
+        # Обработка временных полей с конвертацией временной зоны
+        created_at = ensure_datetime(user.get('created_at'), now_utc, old_db_tz)
+        expire = ensure_datetime(user.get('expire'), timezone=old_db_tz)
+        sub_revoked_at = ensure_datetime(user.get('sub_revoked_at'), timezone=old_db_tz)
+        sub_updated_at = ensure_datetime(user.get('sub_updated_at'), timezone=old_db_tz)
+        online_at = ensure_datetime(user.get('online_at'), timezone=old_db_tz)
+        edit_at = ensure_datetime(user.get('edit_at'), timezone=old_db_tz)
+        last_status_change = ensure_datetime(user.get('last_status_change'), timezone=old_db_tz)
         
         # Формирование записи
         new_user = {
@@ -272,6 +298,7 @@ try:
     
     new_conn.commit()
     print(f"\n[✓] Успешно перенесено {len(new_users)} пользователей")
+    print(f"Конвертация времени выполнена из: {old_db_tz} -> UTC")
     
 except mysql.connector.Error as err:
     print(f"\n[!] Ошибка MySQL: {err}")
