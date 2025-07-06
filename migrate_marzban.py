@@ -101,16 +101,14 @@ def save_config(old_cfg, new_cfg):
         print(f"Ошибка сохранения конфига: {e}")
 
 def convert_timestamp(ts):
-    """Преобразование UNIX timestamp в DATETIME строку"""
     if ts is None or ts == 0:
         return None
     
     try:
-        # Проверяем, не является ли значение уже в формате datetime
-        if isinstance(ts, datetime.datetime):
-            return ts.strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Преобразуем числовое значение
+        # Проверка на корректный диапазон времени
+        if ts < 0 or ts > 253402300799:  # 9999-12-31 23:59:59
+            return None
+            
         return datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
     except (ValueError, TypeError, OSError):
         return None
