@@ -114,25 +114,30 @@ def convert_timestamp(ts):
         return None
 
 def ensure_datetime(value, default=None):
-    """Гарантирует, что значение будет в правильном формате DATETIME"""
-    if value is None:
-        return default or datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    """Конвертирует значение в DATETIME, сохраняя NULL (None)"""
+    # Если значение None или 0 - возвращаем None (для expire это NULL)
+    if value is None or value == 0:
+        return None
     
-    try:
-        # Если значение уже в правильном строковом формате
-        if isinstance(value, str) and len(value) == 19:  # 'YYYY-MM-DD HH:MM:SS'
+    # Если значение уже является строкой в правильном формате
+    if isinstance(value, str) and len(value) == 19:  # 'YYYY-MM-DD HH:MM:SS'
+        try:
+            # Проверяем, что строка соответствует формату
             datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
             return value
-    except ValueError:
+        except ValueError:
+            pass
+    
+    # Пробуем конвертировать из timestamp
+    try:
+        # Проверка на корректный диапазон времени
+        if 0 < value <= 253402300799:  # Диапазон 1970-9999 год
+            return datetime.datetime.utcfromtimestamp(value).strftime('%Y-%m-%d %H:%M:%S')
+    except (TypeError, ValueError):
         pass
     
-    # Пробуем преобразовать из timestamp
-    converted = convert_timestamp(value)
-    if converted:
-        return converted
-    
-    # Возвращаем значение по умолчанию
-    return default or datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    # Во всех остальных случаях возвращаем default
+    return default
 
 # Основной код скрипта
 prev_config = load_config()
