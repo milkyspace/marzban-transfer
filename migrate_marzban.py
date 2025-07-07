@@ -101,19 +101,6 @@ def save_config(old_cfg, new_cfg):
     except Exception as e:
         print(f"Ошибка сохранения конфига: {e}")
 
-def convert_timestamp(ts):
-    if ts is None or ts == 0:
-        return None
-    
-    try:
-        # Проверка на корректный диапазон времени
-        if ts < 0 or ts > 253402300799:  # 9999-12-31 23:59:59
-            return None
-            
-        return datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-    except (ValueError, TypeError, OSError):
-        return None
-
 def ensure_datetime(value, default=None, timezone='UTC'):
     """Конвертирует значение в DATETIME с учетом часового пояса"""
     if value is None or value == 0:
@@ -200,6 +187,10 @@ print("2. Старая БД: Москва (UTC+3)")
 old_db_tz = input("В какой временной зоне хранятся данные в СТАРОЙ базе? (1/2): ").strip()
 old_db_tz = 'Europe/Moscow' if old_db_tz == '2' else 'UTC'
 
+# Запрос о переносе сроков действия
+print("\n" + "="*50)
+transfer_expire = input("Переносить срок действия пользователей (expire)? (y/n): ").lower() == 'y'
+
 print("\nНовая БД всегда использует UTC")
 print("Все данные будут автоматически конвертированы")
 
@@ -252,9 +243,15 @@ try:
         
         # Обработка временных полей с конвертацией временной зоны
         created_at = ensure_datetime(user.get('created_at'), now_utc, old_db_tz)
-        expire = 0 #ensure_datetime(user.get('expire'), timezone=old_db_tz)
-        sub_revoked_at = 0 #ensure_datetime(user.get('sub_revoked_at'), timezone=old_db_tz)
-        sub_updated_at = 0 #ensure_datetime(user.get('sub_updated_at'), timezone=old_db_tz)
+        
+        # Обработка expire в зависимости от выбора пользователя
+        if transfer_expire:
+            expire = ensure_datetime(user.get('expire'), timezone=old_db_tz)
+        else:
+            expire = None
+            
+        sub_revoked_at = ensure_datetime(user.get('sub_revoked_at'), timezone=old_db_tz)
+        sub_updated_at = ensure_datetime(user.get('sub_updated_at'), timezone=old_db_tz)
         online_at = ensure_datetime(user.get('online_at'), timezone=old_db_tz)
         edit_at = ensure_datetime(user.get('edit_at'), timezone=old_db_tz)
         last_status_change = ensure_datetime(user.get('last_status_change'), timezone=old_db_tz)
@@ -299,6 +296,7 @@ try:
     new_conn.commit()
     print(f"\n[✓] Успешно перенесено {len(new_users)} пользователей")
     print(f"Конвертация времени выполнена из: {old_db_tz} -> UTC")
+    print(f"Сроки действия перенесены: {'Да' if transfer_expire else 'Нет'}")
     
 except mysql.connector.Error as err:
     print(f"\n[!] Ошибка MySQL: {err}")
