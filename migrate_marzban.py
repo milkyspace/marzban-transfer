@@ -252,9 +252,9 @@ try:
         
         # Обработка временных полей с конвертацией временной зоны
         created_at = ensure_datetime(user.get('created_at'), now_utc, old_db_tz)
-        expire = ensure_datetime(user.get('expire'), timezone=old_db_tz)
-        sub_revoked_at = ensure_datetime(user.get('sub_revoked_at'), timezone=old_db_tz)
-        sub_updated_at = ensure_datetime(user.get('sub_updated_at'), timezone=old_db_tz)
+        expire = 0 #ensure_datetime(user.get('expire'), timezone=old_db_tz)
+        sub_revoked_at = 0 #ensure_datetime(user.get('sub_revoked_at'), timezone=old_db_tz)
+        sub_updated_at = 0 #ensure_datetime(user.get('sub_updated_at'), timezone=old_db_tz)
         online_at = ensure_datetime(user.get('online_at'), timezone=old_db_tz)
         edit_at = ensure_datetime(user.get('edit_at'), timezone=old_db_tz)
         last_status_change = ensure_datetime(user.get('last_status_change'), timezone=old_db_tz)
